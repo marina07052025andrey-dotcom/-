@@ -1,0 +1,166 @@
+text
+Ты — senior Flutter-разработчик и DevOps-инженер. Мне нужно полностью рабочее Android-приложение на Flutter/Dart под названием "Цветочек Радости". Используй предоставленные ниже файлы как основу, дополни недостающую логику (аудиоплеер, запись с микрофона, парсинг уровней, анимация реакции цветка на настроение) и выдай готовый к сборке проект.
+
+📱 ОПИСАНИЕ ПРОЕКТА:
+• Интерактивный цветочек в центре экрана, который плавно меняет цвет/анимацию в зависимости от выбранного настроения и текущего уровня
+• Панель выбора настроения с эмодзи-кнопками: 😊 😢 😴 🤯 🥰 🌿 (при нажатии обновляется состояние, цветок реагирует, сохраняется в локальное хранилище)
+• 1000 уровней. Не создавай 1000 экранов. Уровни хранятся в assets/levels.json, подгружаются динамически по индексу `level - 1`. Каждый уровень содержит: level_id, theme, audio, duration_min
+• Встроенный плеер медитаций: кнопки Play/Pause, прогресс-бар, кастомный слайдер громкости внутри UI
+• Кнопка "Дыхание" (микрофон): запрашивает разрешение RECORD_AUDIO, записывает 5-10 сек аудио, показывает простую визуализацию волны, сохраняет файл локально
+• Сохранение прогресса: текущий уровень, настроение, громкость, статус прохождения (Hive)
+• UI: минималистичный, успокаивающий, Material 3, мягкие цвета, плавные переходы
+
+🛠 ТЕХНИЧЕСКИЕ ТРЕБОВАНИЯ:
+• Flutter stable, Dart >=3.0
+• Зависимости: provider, audioplayers, record, permission_handler, hive_flutter, lottie, path_provider
+• Архитектура: разделение логики, state management через Provider/ChangeNotifier
+• AndroidManifest должен содержать разрешения: INTERNET, RECORD_AUDIO, FOREGROUND_SERVICE
+• Код должен быть полным, рабочим, без TODO-заглушек. Все импорты, конфиги и пути к assets указаны явно.
+• Если нужны внешние файлы (Lottie JSON, MP3), укажи точные имена, размеры и где их бесплатно скачать, а также как их подключить.
+
+📦 БАЗОВЫЕ ФАЙЛЫ (используй как основу, дополни и исправь при необходимости):
+
+📄 pubspec.yaml
+name: flower_joy
+description: Цветочек Радости - медитативное приложение
+publish_to: 'none'
+version: 1.0.0+1
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.1
+  audioplayers: ^6.0.0
+  record: ^5.0.0
+  permission_handler: ^11.3.0
+  hive_flutter: ^1.1.0
+  lottie: ^3.1.0
+  path_provider: ^2.1.2
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/levels.json
+    - assets/lottie/
+    - assets/audio/
+
+📄 lib/main.dart
+import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:lottie/lottie.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  await Hive.openBox('flower_joy');
+  runApp(const FlowerJoyApp());
+}
+
+class FlowerJoyApp extends StatelessWidget {
+  const FlowerJoyApp({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => AppState(),
+      child: MaterialApp(
+        title: 'Цветочек Радости',
+        theme: ThemeData(brightness: Brightness.light, primarySwatch: Colors.teal, scaffoldBackgroundColor: const Color(0xFFF8F4EC), useMaterial3: true),
+        home: const HomeScreen(),
+        debugShowCheckedModeBanner: false,
+      ),
+    );
+  }
+}
+
+class AppState extends ChangeNotifier {
+  final _box = Hive.box('flower_joy');
+  int level = 1;
+  String mood = '😊';
+  double volume = 0.7;
+  bool isPlaying = false;
+  AppState() {
+    level = _box.get('level', defaultValue: 1) as int;
+    mood = _box.get('mood', defaultValue: '😊') as String;
+    volume = _box.get('volume', defaultValue: 0.7) as double;
+  }
+  void setLevel(int v) { level = v; _box.put('level', level); notifyListeners(); }
+  void setMood(String v) { mood = v; _box.put('mood', mood); notifyListeners(); }
+  void setVolume(double v) { volume = v; _box.put('volume', volume); notifyListeners(); }
+  void togglePlay() { isPlaying = !isPlaying; notifyListeners(); }
+}
+
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    return Scaffold(
+      appBar: AppBar(title: const Text('Цветочек Радости'), centerTitle: true),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Column(
+            children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text('Уровень: ${state.level}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                Text('Настроение: ${state.mood}', style: const TextStyle(fontSize: 16)),
+              ]),
+              const SizedBox(height: 20),
+              Expanded(flex: 2, child: Center(child: Lottie.asset('assets/lottie/flower.json', width: 180, height: 180, errorBuilder: (_, __, ___) => Container(width: 160, height: 160, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.pink.shade50), child: Icon(Icons.local_florist, size: 70, color: Colors.pink.shade300))))),
+              const SizedBox(height: 15),
+              Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: ['😊','😢','😴','🤯','🥰','🌿'].map((e) => ElevatedButton(onPressed: () => state.setMood(e), style: ElevatedButton.styleFrom(backgroundColor: state.mood == e ? Colors.teal : Colors.grey.shade200, foregroundColor: Colors.black87), child: Text(e, style: const TextStyle(fontSize: 22)))).toList()),
+              const SizedBox(height: 15),
+              Row(children: [
+                IconButton(icon: Icon(state.isPlaying ? Icons.pause_circle : Icons.play_circle), onPressed: state.togglePlay),
+                Expanded(child: Slider(value: state.volume, onChanged: state.setVolume, min: 0, max: 1)),
+              ]),
+              const SizedBox(height: 15),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                ElevatedButton.icon(onPressed: state.level < 1000 ? () => state.setLevel(state.level + 1) : null, icon: const Icon(Icons.arrow_upward), label: const Text('След. уровень')),
+                ElevatedButton.icon(onPressed: () => _requestMicPermission(), icon: const Icon(Icons.mic), label: const Text('Дыхание')),
+              ]),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  void _requestMicPermission() async {}
+}
+
+📄 assets/levels.json (пример структуры, агент должен объяснить как сгенерировать 1000)
+[
+  {"level": 1, "theme": "pink", "audio": "med_01.mp3", "duration_min": 5},
+  {"level": 2, "theme": "blue", "audio": "med_02.mp3", "duration_min": 5},
+  {"level": 3, "theme": "green", "audio": "med_03.mp3", "duration_min": 6}
+]
+
+📄 android/app/src/main/AndroidManifest.xml (вставить внутрь <manifest>)
+<uses-permission android:name="android.permission.INTERNET"/>
+<uses-permission android:name="android.permission.RECORD_AUDIO"/>
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+
+🚀 ОЖИДАЕМЫЙ ФОРМАТ ТВОЕГО ОТВЕТА:
+1. Полная структура проекта (дерево файлов)
+2. ДОПОЛНЕННЫЙ И РАБОЧИЙ код lib/main.dart с реализацией:
+   - Загрузки и парсинга levels.json
+   - Воспроизведения аудио через audioplayers с учётом слайдера громкости
+   - Записи с микрофона через record + запрос разрешений через permission_handler
+   - Реакции цветка на смену настроения (смена цвета/анимации)
+3. Точная инструкция по размещению Lottie и MP3 в папках assets
+4. Команды для локальной сборки: flutter clean, flutter pub get, flutter build apk --release
+5. ЧЁТКИЙ СПОСОБ ПОЛУЧИТЬ ПРЯМУЮ ССЫЛКУ НА СКАЧИВАНИЕ .apk:
+   ⚠️ ВАЖНО: НЕ выдумывай URL. AI не может хостить файлы. Вместо этого:
+   - Дай готовый .github/workflows/build-apk.yml для GitHub Actions
+   - Объясни пошагово: как загрузить код в GitHub, создать тег v1.0.0, как GitHub соберёт APK и где появится прямая ссылка вида https://github.com/user/repo/releases/download/v1.0.0/app-release.apk
+   - Или дай альтернативу: сборка в Replit/Codespaces + загрузка на бесплатный хостинг (GitHub Releases, Dropbox, MediaFire) с инструкцией получения публичной ссылки
+6. Всё должно быть готово к копированию и немедленной сборке. Без комментариев "// TODO". Без сокращений кода.
+
+Начни генерацию. Выдай полный проект, инструкции и точный путь к APK-ссылке.
